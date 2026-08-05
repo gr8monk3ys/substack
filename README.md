@@ -21,7 +21,7 @@ manual.
 ./substack.py pos build         # → drafts/about.md + drafts/welcome-post.md
 ```
 
-## The five tools
+## The tools
 
 ### `pos` — positioning
 Finds the throughline for a personality-led publication, then generates the
@@ -124,6 +124,42 @@ columns it matched so you can see what it understood. The report is a
 self-contained HTML file — inline SVG charts, light/dark aware, no external
 requests.
 
+### `remind` — the daily nudge
+The strategy depends on showing up daily, and a tool only helps if you open it.
+This delivers the day's slate to you instead — what's missing from the slate,
+whether your streak is about to break, who's going cold, and whether your
+numbers have gone stale.
+
+```bash
+./substack.py remind run                      # build and deliver it now
+./substack.py remind install --at 08:30       # schedule it daily
+./substack.py remind install --at 08:30 --dry-run
+./substack.py remind status                   # what's configured + a live preview
+./substack.py remind uninstall
+```
+
+Scheduling uses **launchd** on macOS and **crontab** on Linux. Delivery uses
+whatever's available, in combination:
+
+| Channel | Notes |
+|---|---|
+| desktop | `osascript` / `notify-send` — needs a logged-in session |
+| webhook | Slack or Discord — works headless, reaches your phone |
+| log | always appended to `data/nudges.log` |
+
+```bash
+./substack.py remind webhook https://hooks.slack.com/services/...
+./substack.py remind webhook none      # clear it
+```
+
+One payload satisfies both Slack (`text`) and Discord (`content`), so the same
+URL field works for either.
+
+> **On a cloud dev box** (Codespaces and similar) there's usually no cron daemon,
+> and even with one it only fires while the machine is awake. `remind install`
+> detects this, refuses to pretend it worked, and prints the line to install on a
+> machine that stays on. A webhook is the reliable option there.
+
 ### `plan` / `checklist` — the daily driver
 ```bash
 ./substack.py plan                               # stage-aware: what to do today
@@ -135,7 +171,7 @@ requests.
 
 ```
 substack.py          CLI entrypoint
-sstools/             store, positioning, notes, pipeline, network, analytics, review, plan
+sstools/             store, positioning, notes, pipeline, network, analytics, review, remind, plan
 tests/               regression suite — python3 -m unittest discover tests
 data/                your JSON state (versioned — this is your backup)
 data/exports/        raw Substack export zips            (gitignored — contains emails)
@@ -163,14 +199,14 @@ after you delete the files.
 ## Tests
 
 ```bash
-python3 -m unittest discover tests        # 42 tests, no dependencies
+python3 -m unittest discover tests        # 55 tests, no dependencies
 ```
 
 The suite covers the parsing and aggregation logic — the parts that produce
 *wrong answers* rather than crashing: fuzzy CSV column matching, the
 posts/stats merge, date parsing across Substack's export formats, pull-quote
-extraction, hook ranking, and review windowing. Every bug found while building
-this is pinned here as a regression test.
+extraction, hook ranking, review windowing, and streak-at-risk detection.
+Every bug found while building this is pinned here as a regression test.
 
 ## Note
 

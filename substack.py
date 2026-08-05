@@ -11,7 +11,7 @@ number here comes from your own CSV exports or what you log by hand.
 import argparse
 import sys
 
-from sstools import analytics, network, pipeline, plan, positioning, review, store
+from sstools import analytics, network, pipeline, plan, positioning, remind, review, store
 from sstools import notes as notes_mod
 
 
@@ -29,6 +29,8 @@ def build_parser():
   ./substack.py notes score 3 --subs 6 --restacks 4
   ./substack.py notes best               # which formulas actually earn you subscribers
   ./substack.py review                   # weekly: did any of it work?
+  ./substack.py remind install --at 08:30   # daily nudge
+  ./substack.py remind status
   ./substack.py post new "Working title"
   ./substack.py post repurpose my-draft --queue
   ./substack.py net targets
@@ -37,7 +39,7 @@ def build_parser():
 """,
     )
     sub = p.add_subparsers(dest="command", required=True)
-    for mod in (plan, review, positioning, notes_mod, pipeline, network, analytics):
+    for mod in (plan, review, positioning, notes_mod, pipeline, network, analytics, remind):
         mod.register(sub)
     return p
 

@@ -20,7 +20,7 @@ from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sstools import analytics, network, notes, pipeline, positioning, review, store
+from sstools import analytics, network, notes, pipeline, positioning, remind, review, store
 
 
 def quiet(fn, *a, **kw):
@@ -378,6 +378,96 @@ class TestNetwork(TempStore):
         store.save("network", data)
         _, out = quiet(network.cmd_due, argparse.Namespace())
         self.assertNotIn("Partner", out)
+
+
+# --- remind -----------------------------------------------------------------
+
+
+class TestRemind(TempStore):
+    def _log_days(self, *offsets):
+        today = date.today()
+        store.save("notes_queue", {"items": [], "log": [
+            {"id": i, "kind": "original", "date": (today - timedelta(days=n)).isoformat()}
+            for i, n in enumerate(offsets, 1)]})
+
+    def test_streak_ending_yesterday_is_at_risk(self):
+        """Regression: a live streak that today would break must warn, but the
+        naive count-back-from-today returns 0 and says nothing."""
+        self._log_days(1, 2, 3)
+        _, lines = remind.digest()
+        self.assertIn("3-day streak at risk", lines)
+
+    def test_streak_including_today_is_not_at_risk(self):
+        self._log_days(0, 1, 2)
+        _, lines = remind.digest()
+        self.assertIn("3-day streak", lines)
+        self.assertNotIn("3-day streak at risk", lines)
+
+    def test_broken_streak_is_silent(self):
+        self._log_days(4, 5, 6)
+        _, lines = remind.digest()
+        self.assertFalse(any("streak" in l for l in lines))
+
+    def test_pluralization(self):
+        self.assertEqual(remind._plural("reply", 5), "replies")
+        self.assertEqual(remind._plural("reply", 1), "reply")
+        self.assertEqual(remind._plural("restack", 2), "restacks")
+
+    def test_digest_flags_stale_contact(self):
+        store.save("network", {"items": [{
+            "id": 1, "name": "Ian", "status": "target",
+            "touched": (date.today() - timedelta(days=30)).isoformat(), "history": []}]})
+        _, lines = remind.digest()
+        self.assertTrue(any("going cold: Ian" in l for l in lines))
+
+    def test_digest_flags_unlogged_numbers(self):
+        store.save("metrics", {"days": [
+            {"date": (date.today() - timedelta(days=9)).isoformat(), "subs": 40}]})
+        _, lines = remind.digest()
+        self.assertTrue(any("not logged in 9d" in l for l in lines))
+
+    def test_digest_survives_empty_state(self):
+        title, lines = remind.digest()
+        self.assertTrue(title)
+        self.assertTrue(lines)
+
+    def test_cron_entry_is_wellformed(self):
+        entry = remind._cron_entry("08:30")
+        fields = entry.split()
+        self.assertEqual(fields[:5], ["30", "8", "*", "*", "*"])
+        self.assertIn("remind run --quiet", entry)
+        self.assertIn(remind.MARKER, entry)
+
+    def test_cron_entry_strips_leading_zeros(self):
+        self.assertTrue(remind._cron_entry("09:05").startswith("5 9 "))
+
+    def test_install_rejects_bad_time(self):
+        code, _ = quiet(remind.cmd_install,
+                        argparse.Namespace(at="99:99", dry_run=True))
+        self.assertEqual(code, 1)
+
+    def test_webhook_requires_https(self):
+        code, _ = quiet(remind.cmd_webhook, argparse.Namespace(url="http://insecure"))
+        self.assertEqual(code, 1)
+        self.assertFalse(store.config().get("webhook"))
+
+    def test_webhook_can_be_cleared(self):
+        store.set_config(webhook="https://hooks.example.com/x")
+        quiet(remind.cmd_webhook, argparse.Namespace(url="none"))
+        self.assertEqual(store.config().get("webhook"), "")
+
+    def test_run_always_writes_the_log(self):
+        # Stub the desktop channel so running the suite on a machine with
+        # notify-send/osascript doesn't fire a real notification.
+        original = remind._desktop
+        remind._desktop = lambda title, body: None
+        try:
+            code, _ = quiet(remind.cmd_run, argparse.Namespace(quiet=False))
+        finally:
+            remind._desktop = original
+        self.assertEqual(code, 0)
+        with open(os.path.join(store.DATA, "nudges.log")) as f:
+            self.assertIn("·", f.read())
 
 
 if __name__ == "__main__":

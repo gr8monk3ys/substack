@@ -151,6 +151,13 @@ This is the whole job, and it's small enough to do daily.
 ./substack.py review        # the weekly loop — did any of it work?
 ```
 
+If you'd rather be told than have to remember, schedule the nudge — it pushes
+the day's slate at you, and warns you when a streak is about to break:
+
+```bash
+./substack.py remind install --at 08:30
+```
+
 **Score your notes.** A day or two after posting, record what a note actually
 did (`notes score <id> --subs 6 --restacks 4`). After ~20 scored notes,
 `notes best` stops being generic best-practice and starts telling you which

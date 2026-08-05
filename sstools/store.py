@@ -53,6 +53,7 @@ def ok(text):
 
 
 def err(text):
+    sys.stdout.flush()  # keep stderr in order with buffered stdout when piped
     print(f"  {red('✗')} {text}", file=sys.stderr)
 
 
