@@ -1,0 +1,16 @@
+# Raw Substack export zips contain your subscribers' email addresses.
+# Never commit these. data/imported.json is the safe, email-free derivative.
+data/exports/*
+!data/exports/.gitkeep
+
+# Generated output
+data/report.html
+
+# Python
+__pycache__/
+*.pyc
+
+# Everything else — data/*.json, drafts/, positioning.md — is versioned on
+# purpose. Your idea bank, network history, and note scores exist nowhere else,
+# and git is the backup. See README ("What's versioned, and why") before making
+# this repo public.
