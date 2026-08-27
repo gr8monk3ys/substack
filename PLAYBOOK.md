@@ -158,12 +158,14 @@ the day's slate at you, and warns you when a streak is about to break:
 ./substack.py remind install --at 08:30
 ```
 
-**Score your notes.** A day or two after posting, record what a note actually
-did (`notes score <id> --subs 6 --restacks 4`). After ~20 scored notes,
+**Score your notes — weekly, in one sitting.** Right before `review`, run
+`notes session`: it walks every posted-but-unscored note and you type the
+likes/replies/restacks straight off Substack. After ~20 scored notes,
 `notes best` stops being generic best-practice and starts telling you which
 formulas work *for your voice and your readers* — which is the only version that
 matters. Most writers never learn this about themselves because they never
-write it down.
+write it down. (Ranking uses engagement, not subscribers — Substack can't tell
+you which note a subscriber came from, and guessing would poison the data.)
 
 **Cadence beats volume.** Weekly, on a fixed day, forever, outperforms three posts
 one week and nothing for a month. Pick the day in the worksheet and defend it.

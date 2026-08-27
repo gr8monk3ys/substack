@@ -26,8 +26,8 @@ def build_parser():
   ./substack.py plan                     # today's actions
   ./substack.py notes draft "an idea"    # render it through 10 hook formulas
   ./substack.py notes today              # the daily engagement slate
-  ./substack.py notes score 3 --subs 6 --restacks 4
-  ./substack.py notes best               # which formulas actually earn you subscribers
+  ./substack.py notes session            # weekly scoring pass over posted notes
+  ./substack.py notes best               # which formulas actually earn engagement
   ./substack.py review                   # weekly: did any of it work?
   ./substack.py remind install --at 08:30   # daily nudge
   ./substack.py remind status

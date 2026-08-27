@@ -50,17 +50,22 @@ tracks all three, in ratio.
 ./substack.py notes log                          # history + streak
 ```
 
-**Close the loop.** Tag each note with the formula it used, score it a day or two
-after posting, and the generic best-practice formulas become *your* data:
+**Close the loop.** Tag each note with the formula it used, score it, and the
+generic best-practice formulas become *your* data. Score in one weekly batch —
+per-note-per-day data entry never survives a real week:
 
 ```bash
-./substack.py notes score 3 --subs 6 --restacks 4 --replies 8 --likes 40
+./substack.py notes session                      # walk every unscored note, once a week
+./substack.py notes score 3 --restacks 4 --replies 8 --likes 40   # or one at a time
 ./substack.py notes tag 3 story                  # if you forgot to tag on add
-./substack.py notes best                         # ranked by subscribers-per-note
+./substack.py notes best                         # ranked by engagement-per-note
 ```
 
-`notes best` marks any formula with fewer than 3 scored notes as too thin to
-trust, so you don't over-fit to one lucky post.
+`notes best` ranks on likes/replies/restacks — the numbers Substack actually
+shows you per note. You can also record `--subs` as a guess, and it's displayed,
+but never ranked on: Substack can't attribute a subscriber to a specific note,
+and ranking on guesses teaches you fiction. Formulas with fewer than 3 scored
+notes are flagged as too thin to trust, so you don't over-fit to one lucky post.
 
 ### `review` — the weekly loop
 The only command that connects what you did to what happened. Run it the same

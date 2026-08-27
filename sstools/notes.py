@@ -229,13 +229,20 @@ def _weight(score):
 
 
 def cmd_best(args):
-    """Rank your hook formulas by what they actually earned you."""
+    """Rank your hook formulas by measured engagement.
+
+    Ranking uses likes/replies/restacks — the numbers Substack actually shows
+    you per note. Subs are displayed but never ranked on: Substack can't tie a
+    subscriber to a specific note, so that column is your own guess, not data.
+    Publication-level subscriber growth belongs in `stats log` and `review`.
+    """
     q = _queue()
     scored = [i for i in q["items"] if i.get("score")]
     header("What's working")
     if not scored:
         warn("nothing scored yet")
-        bullet("Post a note, mark it done, then:  ./substack.py notes score <id> --subs 3 --restacks 2")
+        bullet("Post a note, mark it done, then score it in a weekly pass:  "
+               "./substack.py notes session")
         return 0
 
     groups = {}
@@ -247,31 +254,89 @@ def cmd_best(args):
         n = len(items)
         subs = sum(i["score"].get("subs", 0) for i in items)
         eng = sum(_weight(i["score"]) for i in items)
-        rows.append((subs / n, eng / n, n, hook, subs))
+        rows.append((eng / n, n, hook, subs))
     rows.sort(reverse=True)
 
-    print(f"  {dim('formula'.ljust(13))}{dim('notes'.rjust(6))}{dim('subs'.rjust(7))}"
-          f"{dim('subs/note'.rjust(11))}{dim('engagement'.rjust(12))}")
-    for avg_subs, avg_eng, n, hook, subs in rows:
+    print(f"  {dim('formula'.ljust(13))}{dim('notes'.rjust(6))}"
+          f"{dim('engage/note'.rjust(13))}{dim('subs*'.rjust(8))}")
+    for avg_eng, n, hook, subs in rows:
         thin = dim(" ·") if n < 3 else "  "
-        print(f"  {bold(hook.ljust(13))}{str(n).rjust(6)}{str(subs).rjust(7)}"
-              f"{avg_subs:>11.1f}{avg_eng:>12.1f}{thin}")
+        print(f"  {bold(hook.ljust(13))}{str(n).rjust(6)}"
+              f"{avg_eng:>13.1f}{str(subs).rjust(8)}{thin}")
 
     print()
-    if any(n < 3 for *_, n, _, _ in rows):
+    print(dim("  engagement = likes + 2×replies + 3×restacks — what Substack shows per note"))
+    print(dim("  * subs are self-attributed guesses; Substack can't tie a subscriber to a"))
+    print(dim("    note. A hint, never a ranking. Real growth lives in `review`."))
+    if any(n < 3 for _, n, _, _ in rows):
         print(dim("  · fewer than 3 notes — too thin to trust yet"))
     top = rows[0]
-    if top[2] >= 3:
-        bullet(f"{bold(top[3])} is your strongest formula at {top[0]:.1f} subs/note. "
+    if top[1] >= 3:
+        bullet(f"{bold(top[2])} is your strongest formula at {top[0]:.1f} engagement/note. "
                "Use it more, and look at what those notes had in common beyond the shape.")
 
     print()
     print(f"  {bold('Top individual notes')}")
-    for i in sorted(scored, key=lambda i: i["score"].get("subs", 0), reverse=True)[:5]:
+    for i in sorted(scored, key=lambda i: _weight(i["score"]), reverse=True)[:5]:
         s = i["score"]
         tag = dim(f"[{i.get('hook') or 'untagged'}]")
-        print(f"    {green('+' + str(s.get('subs', 0))).rjust(14)} {tag} "
-              f"{i['text'].split(chr(10))[0][:46]}")
+        subs_note = dim(f"  +{s['subs']} subs*") if s.get("subs") else ""
+        print(f"    {green(str(_weight(s)).rjust(5))} {tag} "
+              f"{i['text'].split(chr(10))[0][:46]}{subs_note}")
+    return 0
+
+
+def unscored(q):
+    """Posted notes with no score yet — the weekly session's worklist."""
+    return [i for i in q["items"] if i["status"] == "posted" and not i.get("score")]
+
+
+def cmd_session(args):
+    """Interactive scoring pass — walk every posted-but-unscored note once.
+
+    Scoring one note a day after posting never survives contact with a real
+    week; a single batch pass right before `review` does.
+    """
+    q = _queue()
+    pending = unscored(q)
+    header(f"Scoring session — {len(pending)} unscored note(s)")
+    if not pending:
+        ok("every posted note has numbers. Run:  ./substack.py review")
+        return 0
+    print(dim("  Open each note on Substack and type its numbers:"))
+    print(dim("      likes restacks replies [subs]     e.g.  40 4 8  or  40 4 8 2"))
+    print(dim("  Enter skips · q stops (progress is saved as you go)"))
+    print()
+
+    done = 0
+    for item in pending:
+        tag = dim(f"[{item.get('hook') or item['kind']}]")
+        print(f"  {bold('#' + str(item['id']))} {tag} {item['text'].split(chr(10))[0][:58]}")
+        print(f"      {dim('posted ' + item.get('posted', '?'))}")
+        try:
+            raw = input("      > ").strip()
+        except EOFError:
+            print()
+            break
+        if raw.lower() in ("q", "quit"):
+            break
+        if not raw:
+            continue
+        try:
+            nums = [int(p) for p in raw.split()[:4]]
+        except ValueError:
+            warn("numbers only — skipped")
+            continue
+        score = dict(zip(("likes", "restacks", "replies", "subs"), nums))
+        score["at"] = store.today()
+        item["score"] = score
+        _save(q)
+        done += 1
+
+    print()
+    ok(f"scored {done} of {len(pending)}")
+    if done:
+        bullet("See what it changed:  ./substack.py notes best")
     return 0
 
 
@@ -407,7 +472,8 @@ def register(sub):
     sc.add_argument("--likes", type=int)
     sc.add_argument("--restacks", type=int)
     sc.add_argument("--replies", type=int)
-    sc.add_argument("--subs", type=int, help="subscribers you can attribute to it")
+    sc.add_argument("--subs", type=int,
+                    help="subscribers you'd guess it earned (a hint — never ranked on)")
     sc.set_defaults(func=cmd_score)
 
     tg = s.add_parser("tag", help="set the hook formula on an existing note")
@@ -415,8 +481,11 @@ def register(sub):
     tg.add_argument("hook")
     tg.set_defaults(func=cmd_tag)
 
-    s.add_parser("best", help="rank your hook formulas by what they earned") \
+    s.add_parser("best", help="rank your hook formulas by measured engagement") \
         .set_defaults(func=cmd_best)
+
+    s.add_parser("session", help="interactive scoring pass over unscored posted notes") \
+        .set_defaults(func=cmd_session)
 
     s.add_parser("queue", help="show the queue").set_defaults(func=cmd_queue)
     s.add_parser("today", help="today's engagement slate").set_defaults(func=cmd_today)

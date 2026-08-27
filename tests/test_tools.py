@@ -16,6 +16,7 @@ import tempfile
 import unittest
 import zipfile
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -254,12 +255,21 @@ class TestNotes(TempStore):
             text="x", kind="original", hook="bogus", target=None))
         self.assertEqual(code, 1)
 
-    def test_best_ranks_by_subs_per_note(self):
-        self._post("story", 10)
-        self._post("story", 14)
-        self._post("list", 1)
+    def test_best_ranks_by_engagement_per_note(self):
+        self._post("story", 0, restacks=6, replies=8, likes=30)
+        self._post("story", 0, restacks=4, replies=5, likes=20)
+        self._post("list", 0, restacks=0, replies=0, likes=2)
         _, out = quiet(notes.cmd_best, argparse.Namespace())
         self.assertLess(out.index("story"), out.index("list"), "story should rank above list")
+
+    def test_best_ignores_subs_when_ranking(self):
+        """Subs are self-attributed guesses — Substack can't tie a subscriber to
+        a note, so a big subs claim must never beat measured engagement."""
+        self._post("confession", 50, restacks=0, replies=0, likes=1)
+        self._post("story", 0, restacks=5, replies=6, likes=25)
+        _, out = quiet(notes.cmd_best, argparse.Namespace())
+        self.assertLess(out.index("story"), out.index("confession"),
+                        "measured engagement should outrank claimed subs")
 
     def test_best_flags_thin_samples(self):
         self._post("story", 10)
@@ -275,6 +285,50 @@ class TestNotes(TempStore):
         code, _ = quiet(notes.cmd_score, argparse.Namespace(
             id="99", subs=1, restacks=None, replies=None, likes=None))
         self.assertEqual(code, 1)
+
+    def _post_unscored(self, hook="story"):
+        quiet(notes.cmd_add, argparse.Namespace(
+            text=f"unscored {hook}", kind="original", hook=hook, target=None))
+        nid = store.load("notes_queue")["items"][-1]["id"]
+        quiet(notes.cmd_done, argparse.Namespace(id=nid))
+        return nid
+
+    def test_session_scores_posted_notes(self):
+        self._post_unscored()
+        self._post_unscored()
+        with mock.patch("builtins.input", side_effect=["40 4 8 2", "10 1 0"]):
+            code, out = quiet(notes.cmd_session, argparse.Namespace())
+        self.assertEqual(code, 0)
+        self.assertIn("scored 2 of 2", out)
+        items = store.load("notes_queue")["items"]
+        self.assertEqual(items[0]["score"]["likes"], 40)
+        self.assertEqual(items[0]["score"]["subs"], 2)
+        self.assertEqual(items[1]["score"]["replies"], 0)
+        self.assertNotIn("subs", items[1]["score"], "unentered fields must stay absent")
+
+    def test_session_skip_and_quit_keep_progress(self):
+        self._post_unscored()
+        self._post_unscored()
+        self._post_unscored()
+        with mock.patch("builtins.input", side_effect=["", "5 0 1", "q"]):
+            _, out = quiet(notes.cmd_session, argparse.Namespace())
+        self.assertIn("scored 1 of 3", out)
+        items = store.load("notes_queue")["items"]
+        self.assertNotIn("score", items[0], "Enter must skip without scoring")
+        self.assertEqual(items[1]["score"]["likes"], 5)
+
+    def test_session_survives_eof_and_junk(self):
+        self._post_unscored()
+        self._post_unscored()
+        with mock.patch("builtins.input", side_effect=["not numbers", EOFError]):
+            code, out = quiet(notes.cmd_session, argparse.Namespace())
+        self.assertEqual(code, 0)
+        self.assertIn("scored 0 of 2", out)
+
+    def test_session_with_nothing_pending(self):
+        code, out = quiet(notes.cmd_session, argparse.Namespace())
+        self.assertEqual(code, 0)
+        self.assertIn("every posted note has numbers", out)
 
     def test_streak_counts_consecutive_days(self):
         today = date.today()
@@ -315,6 +369,14 @@ class TestReview(TempStore):
         code, out = quiet(review.cmd_review, argparse.Namespace(days=7))
         self.assertEqual(code, 0)
         self.assertIn("Review", out)
+
+    def test_flags_unscored_posted_notes(self):
+        quiet(notes.cmd_add, argparse.Namespace(
+            text="posted but never scored", kind="original", hook=None, target=None))
+        quiet(notes.cmd_done, argparse.Namespace(id=1))
+        _, out = quiet(review.cmd_review, argparse.Namespace(days=7))
+        self.assertIn("1 posted note(s) unscored", out)
+        self.assertIn("notes session", out)
 
 
 # --- positioning ------------------------------------------------------------
