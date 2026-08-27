@@ -10,6 +10,7 @@ import re
 from datetime import date, timedelta
 
 from . import store
+from .notes import _weight, unscored
 from .store import bold, bullet, dim, green, header, kv, magenta, ok, red, warn, yellow
 
 
@@ -121,13 +122,17 @@ def cmd_review(args):
     print()
     print(f"  {bold('What landed')}")
     if not scored:
-        print(dim("      nothing scored this week — ./substack.py notes score <id> --subs N"))
+        print(dim("      nothing scored this week"))
     else:
-        for i in sorted(scored, key=lambda i: i["score"].get("subs", 0), reverse=True)[:5]:
+        for i in sorted(scored, key=lambda i: _weight(i["score"]), reverse=True)[:5]:
             s = i["score"]
-            print(f"    {green('+' + str(s.get('subs', 0))).rjust(14)} "
+            print(f"    {green(str(_weight(s)).rjust(5))} "
                   f"{dim('[' + (i.get('hook') or 'untagged') + ']')} "
                   f"{i['text'].split(chr(10))[0][:44]}")
+    pending = unscored(q)
+    if pending:
+        bullet(f"{len(pending)} posted note(s) unscored — score them now, in one pass:  "
+               "./substack.py notes session")
 
     posts = _published_posts(cur_start, cur_end)
     print()
@@ -183,7 +188,7 @@ def cmd_review(args):
     print()
     print(f"  {bold('Answer these before next week')}")
     for question in (
-        "Which single note brought the most subscribers, and what was actually different about it?",
+        "Which note started the most real conversation, and what was actually different about it?",
         "Which conversation this week could become a recommendation in a month?",
         "What did you publish out of obligation rather than interest? Cut that next week.",
     ):
